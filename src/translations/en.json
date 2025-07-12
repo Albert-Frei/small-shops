@@ -1157,5 +1157,7 @@
   "UserDisplayName.deleted": "Deleted user",
   "UserNav.accountSettings": "Account settings",
   "UserNav.profileSettings": "Profile settings",
-  "UserNav.yourListings": "Your listings"
+  "UserNav.yourListings": "Your listings",
+  "ProfileGalleryEditor.addImage": "+ Add image",
+  "ProfileGalleryEditor.uploadFailed": "Image upload failed"
 }

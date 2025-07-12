@@ -20,8 +20,14 @@ import TopbarContainer from '../../containers/TopbarContainer/TopbarContainer';
 import FooterContainer from '../../containers/FooterContainer/FooterContainer';
 
 import ProfileSettingsForm from './ProfileSettingsForm/ProfileSettingsForm';
+import ProfileGalleryEditor from './ProfileGallery/ProfileGalleryEditor';
 
-import { updateProfile, uploadImage } from './ProfileSettingsPage.duck';
+import {
+  updateProfile,
+  uploadImage,
+  uploadGalleryImage,
+  removeGalleryImage,
+} from './ProfileSettingsPage.duck';
 import css from './ProfileSettingsPage.module.css';
 
 const onImageUploadHandler = (values, fn) => {
@@ -74,13 +80,18 @@ export const ProfileSettingsPageComponent = props => {
   const {
     currentUser,
     image,
+    galleryImages,
     onImageUpload,
+    onGalleryImageUpload,
+    onRemoveGalleryImage,
     onUpdateProfile,
     scrollingDisabled,
     updateInProgress,
     updateProfileError,
     uploadImageError,
     uploadInProgress,
+    uploadGalleryInProgress,
+    uploadGalleryImageError,
   } = props;
 
   const { userFields, userTypes = [] } = config.user;
@@ -113,10 +124,13 @@ export const ProfileSettingsPageComponent = props => {
     const uploadedImage = props.image;
 
     // Update profileImage only if file system has been accessed
-    const updatedValues =
-      uploadedImage && uploadedImage.imageId && uploadedImage.file
-        ? { ...profile, profileImageId: uploadedImage.imageId }
-        : profile;
+    const updatedValues = {
+      ...profile,
+      metadata: { profileGalleryImages: galleryImages },
+      ...(uploadedImage && uploadedImage.imageId && uploadedImage.file
+        ? { profileImageId: uploadedImage.imageId }
+        : {}),
+    };
 
     onUpdateProfile(updatedValues);
   };
@@ -130,6 +144,7 @@ export const ProfileSettingsPageComponent = props => {
     publicData,
     protectedData,
     privateData,
+    metadata,
   } = user?.attributes.profile;
   // I.e. the status is active, not pending-approval or banned
   const isUnauthorizedUser = currentUser && !isUserAuthorized(currentUser);
@@ -152,6 +167,7 @@ export const ProfileSettingsPageComponent = props => {
         ...displayNameMaybe,
         bio,
         profileImage: user.profileImage,
+        profileGalleryImages: metadata?.profileGalleryImages || [],
         ...initialValuesForUserFields(publicData, 'public', userType, userFields),
         ...initialValuesForUserFields(protectedData, 'protected', userType, userFields),
         ...initialValuesForUserFields(privateData, 'private', userType, userFields),
@@ -188,10 +204,17 @@ export const ProfileSettingsPageComponent = props => {
               <FormattedMessage id="ProfileSettingsPage.heading" />
             </H3>
 
-            <ViewProfileLink userUUID={user?.id?.uuid} isUnauthorizedUser={isUnauthorizedUser} />
-          </div>
-          {profileSettingsForm}
+          <ViewProfileLink userUUID={user?.id?.uuid} isUnauthorizedUser={isUnauthorizedUser} />
         </div>
+        {profileSettingsForm}
+        <ProfileGalleryEditor
+          images={galleryImages}
+          onImageUpload={onGalleryImageUpload}
+          onRemoveImage={onRemoveGalleryImage}
+          uploadInProgress={uploadGalleryInProgress}
+          uploadError={uploadGalleryImageError}
+        />
+      </div>
       </LayoutSingleColumn>
     </Page>
   );
@@ -201,24 +224,34 @@ const mapStateToProps = state => {
   const { currentUser } = state.user;
   const {
     image,
+    galleryImages: storedGalleryImages,
     uploadImageError,
+    uploadGalleryImageError,
     uploadInProgress,
+    uploadGalleryInProgress,
     updateInProgress,
     updateProfileError,
   } = state.ProfileSettingsPage;
+  const metadataImages = currentUser?.attributes?.profile?.metadata?.profileGalleryImages || [];
+  const galleryImages = storedGalleryImages.length > 0 ? storedGalleryImages : metadataImages;
   return {
     currentUser,
     image,
+    galleryImages,
     scrollingDisabled: isScrollingDisabled(state),
     updateInProgress,
     updateProfileError,
     uploadImageError,
+    uploadGalleryImageError,
     uploadInProgress,
+    uploadGalleryInProgress,
   };
 };
 
 const mapDispatchToProps = dispatch => ({
   onImageUpload: data => dispatch(uploadImage(data)),
+  onGalleryImageUpload: data => dispatch(uploadGalleryImage(data)),
+  onRemoveGalleryImage: id => dispatch(removeGalleryImage(id)),
   onUpdateProfile: data => dispatch(updateProfile(data)),
 });
 
