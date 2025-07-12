@@ -1157,5 +1157,7 @@
   "UserDisplayName.deleted": "Gelöschter Benutzer",
   "UserNav.accountSettings": "Kontoeinstellungen",
   "UserNav.profileSettings": "Profileinstellungen",
-  "UserNav.yourListings": "Deine Einträge"
+  "UserNav.yourListings": "Deine Einträge",
+  "ProfileGalleryEditor.addImage": "+ Bild hinzufügen",
+  "ProfileGalleryEditor.uploadFailed": "Bild-Upload fehlgeschlagen"
 }

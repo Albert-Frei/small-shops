@@ -14,12 +14,23 @@ export const UPDATE_PROFILE_REQUEST = 'app/ProfileSettingsPage/UPDATE_PROFILE_RE
 export const UPDATE_PROFILE_SUCCESS = 'app/ProfileSettingsPage/UPDATE_PROFILE_SUCCESS';
 export const UPDATE_PROFILE_ERROR = 'app/ProfileSettingsPage/UPDATE_PROFILE_ERROR';
 
+export const UPLOAD_GALLERY_IMAGE_REQUEST =
+  'app/ProfileSettingsPage/UPLOAD_GALLERY_IMAGE_REQUEST';
+export const UPLOAD_GALLERY_IMAGE_SUCCESS =
+  'app/ProfileSettingsPage/UPLOAD_GALLERY_IMAGE_SUCCESS';
+export const UPLOAD_GALLERY_IMAGE_ERROR =
+  'app/ProfileSettingsPage/UPLOAD_GALLERY_IMAGE_ERROR';
+export const REMOVE_GALLERY_IMAGE = 'app/ProfileSettingsPage/REMOVE_GALLERY_IMAGE';
+
 // ================ Reducer ================ //
 
 const initialState = {
   image: null,
   uploadImageError: null,
   uploadInProgress: false,
+  galleryImages: [],
+  uploadGalleryInProgress: false,
+  uploadGalleryImageError: null,
   updateInProgress: false,
   updateProfileError: null,
 };
@@ -47,6 +58,37 @@ export default function reducer(state = initialState, action = {}) {
       return { ...state, image: null, uploadInProgress: false, uploadImageError: payload.error };
     }
 
+    case UPLOAD_GALLERY_IMAGE_REQUEST: {
+      return {
+        ...state,
+        uploadGalleryInProgress: true,
+        uploadGalleryImageError: null,
+      };
+    }
+    case UPLOAD_GALLERY_IMAGE_SUCCESS: {
+      const { uploadedImage } = payload;
+      const newImg = { id: uploadedImage.id, imageId: uploadedImage.id, uploadedImage };
+      return {
+        ...state,
+        galleryImages: state.galleryImages.concat(newImg),
+        uploadGalleryInProgress: false,
+      };
+    }
+    case UPLOAD_GALLERY_IMAGE_ERROR: {
+      return {
+        ...state,
+        uploadGalleryInProgress: false,
+        uploadGalleryImageError: payload.error,
+      };
+    }
+    case REMOVE_GALLERY_IMAGE: {
+      const id = payload.id;
+      return {
+        ...state,
+        galleryImages: state.galleryImages.filter(img => img.id !== id && img.imageId !== id),
+      };
+    }
+
     case UPDATE_PROFILE_REQUEST:
       return {
         ...state,
@@ -57,6 +99,7 @@ export default function reducer(state = initialState, action = {}) {
       return {
         ...state,
         image: null,
+        galleryImages: [],
         updateInProgress: false,
       };
     case UPDATE_PROFILE_ERROR:
@@ -68,7 +111,12 @@ export default function reducer(state = initialState, action = {}) {
       };
 
     case CLEAR_UPDATED_FORM:
-      return { ...state, updateProfileError: null, uploadImageError: null };
+      return {
+        ...state,
+        updateProfileError: null,
+        uploadImageError: null,
+        uploadGalleryImageError: null,
+      };
 
     default:
       return state;
@@ -90,6 +138,24 @@ export const uploadImageError = error => ({
   type: UPLOAD_IMAGE_ERROR,
   payload: error,
   error: true,
+});
+
+export const uploadGalleryImageRequest = params => ({
+  type: UPLOAD_GALLERY_IMAGE_REQUEST,
+  payload: { params },
+});
+export const uploadGalleryImageSuccess = result => ({
+  type: UPLOAD_GALLERY_IMAGE_SUCCESS,
+  payload: result.data,
+});
+export const uploadGalleryImageError = error => ({
+  type: UPLOAD_GALLERY_IMAGE_ERROR,
+  payload: error,
+  error: true,
+});
+export const removeGalleryImage = id => ({
+  type: REMOVE_GALLERY_IMAGE,
+  payload: { id },
 });
 
 // SDK method: sdk.currentUser.updateProfile
@@ -130,6 +196,27 @@ export function uploadImage(actionPayload) {
         dispatch(uploadImageSuccess({ data: { id, uploadedImage } }));
       })
       .catch(e => dispatch(uploadImageError({ id, error: storableError(e) })));
+  };
+}
+
+export function uploadGalleryImage(actionPayload) {
+  return (dispatch, getState, sdk) => {
+    const id = actionPayload.id;
+    dispatch(uploadGalleryImageRequest(actionPayload));
+
+    const bodyParams = { image: actionPayload.file };
+    const queryParams = {
+      expand: true,
+      'fields.image': ['variants.square-small', 'variants.square-small2x'],
+    };
+
+    return sdk.images
+      .upload(bodyParams, queryParams)
+      .then(resp => {
+        const uploadedImage = resp.data.data;
+        dispatch(uploadGalleryImageSuccess({ data: { uploadedImage } }));
+      })
+      .catch(e => dispatch(uploadGalleryImageError({ id, error: storableError(e) })));
   };
 }
 

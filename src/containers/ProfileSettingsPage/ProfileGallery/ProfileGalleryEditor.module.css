@@ -1,0 +1,73 @@
+@import '../../../styles/customMediaQueries.css';
+
+.root {}
+
+.imagesFieldArray {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.addImageWrapper {
+  position: relative;
+  width: 100%;
+}
+
+.addImageInput {
+  display: none;
+}
+
+.addImage {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 2px dashed var(--colorGrey100);
+  cursor: pointer;
+}
+
+.thumbnailWrapper {
+  position: relative;
+}
+
+.thumbnailLoading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.thumbnailImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.removeButton {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: rgba(0,0,0,0.5);
+  color: white;
+  border: none;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.hiddenSubmit {
+  display: none;
+}
+
+.error {
+  color: var(--colorError);
+}

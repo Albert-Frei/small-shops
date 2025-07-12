@@ -53,6 +53,7 @@ import SectionDetailsMaybe from './SectionDetailsMaybe';
 import SectionTextMaybe from './SectionTextMaybe';
 import SectionMultiEnumMaybe from './SectionMultiEnumMaybe';
 import SectionYoutubeVideoMaybe from './SectionYoutubeVideoMaybe';
+import SectionGalleryImages from './SectionGalleryImages';
 
 const MAX_MOBILE_SCREEN_WIDTH = 768;
 const MIN_LENGTH_FOR_LONG_WORDS = 20;
@@ -253,6 +254,8 @@ export const MainContent = props => {
           intl={intl}
         />
       ) : null}
+
+      <SectionGalleryImages images={metadata?.profileGalleryImages} />
 
       {hasListings ? (
         <div className={listingsContainerClasses}>
