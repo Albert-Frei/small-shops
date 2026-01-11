@@ -212,6 +212,7 @@ export const MainContent = props => {
     userFieldConfig,
     intl,
     hideReviews,
+    galleryImages,
   } = props;
 
   const hasListings = listings.length > 0;
@@ -255,7 +256,7 @@ export const MainContent = props => {
         />
       ) : null}
 
-      <SectionGalleryImages images={metadata?.profileGalleryImages} />
+      <SectionGalleryImages images={galleryImages} />
 
       {hasListings ? (
         <div className={listingsContainerClasses}>
@@ -447,6 +448,10 @@ const mapStateToProps = state => {
   const useCurrentUser =
     isCurrentUser && !(isUserAuthorized(currentUser) && hasPermissionToViewData(currentUser));
 
+  // Get gallery images from user's publicData
+  const profileUser = useCurrentUser ? currentUser : user;
+  const galleryImages = profileUser?.attributes?.profile?.publicData?.profileGalleryImages || [];
+
   return {
     scrollingDisabled: isScrollingDisabled(state),
     currentUser,
@@ -457,6 +462,7 @@ const mapStateToProps = state => {
     listings: getMarketplaceEntities(state, userListingRefs),
     reviews,
     queryReviewsError,
+    galleryImages,
   };
 };
 

@@ -22,6 +22,8 @@ export const UPLOAD_GALLERY_IMAGE_ERROR =
   'app/ProfileSettingsPage/UPLOAD_GALLERY_IMAGE_ERROR';
 export const REMOVE_GALLERY_IMAGE = 'app/ProfileSettingsPage/REMOVE_GALLERY_IMAGE';
 
+export const LOAD_GALLERY_IMAGES = 'app/ProfileSettingsPage/LOAD_GALLERY_IMAGES';
+
 // ================ Reducer ================ //
 
 const initialState = {
@@ -29,6 +31,7 @@ const initialState = {
   uploadImageError: null,
   uploadInProgress: false,
   galleryImages: [],
+  removedGalleryImageIds: [],
   uploadGalleryInProgress: false,
   uploadGalleryImageError: null,
   updateInProgress: false,
@@ -83,11 +86,22 @@ export default function reducer(state = initialState, action = {}) {
     }
     case REMOVE_GALLERY_IMAGE: {
       const id = payload.id;
+      const idStr = id?.uuid || id;
       return {
         ...state,
-        galleryImages: state.galleryImages.filter(img => img.id !== id && img.imageId !== id),
+        galleryImages: state.galleryImages.filter(img => {
+          const imgId = img.id?.uuid || img.id;
+          return imgId !== idStr;
+        }),
+        removedGalleryImageIds: [...state.removedGalleryImageIds, idStr],
       };
     }
+
+    case LOAD_GALLERY_IMAGES:
+      return {
+        ...state,
+        galleryImages: payload.images,
+      };
 
     case UPDATE_PROFILE_REQUEST:
       return {
@@ -100,6 +114,7 @@ export default function reducer(state = initialState, action = {}) {
         ...state,
         image: null,
         galleryImages: [],
+        removedGalleryImageIds: [],
         updateInProgress: false,
       };
     case UPDATE_PROFILE_ERROR:
@@ -156,6 +171,11 @@ export const uploadGalleryImageError = error => ({
 export const removeGalleryImage = id => ({
   type: REMOVE_GALLERY_IMAGE,
   payload: { id },
+});
+
+export const loadGalleryImages = images => ({
+  type: LOAD_GALLERY_IMAGES,
+  payload: { images },
 });
 
 // SDK method: sdk.currentUser.updateProfile
@@ -243,6 +263,13 @@ export const updateProfile = actionPayload => {
 
         // Update current user in state.user.currentUser through user.duck.js
         dispatch(currentUserShowSuccess(currentUser));
+
+        // Load gallery images from the saved publicData
+        const galleryImages =
+          currentUser?.attributes?.profile?.publicData?.profileGalleryImages || [];
+        if (galleryImages.length > 0) {
+          dispatch(loadGalleryImages(galleryImages));
+        }
       })
       .catch(e => dispatch(updateProfileError(storableError(e))));
   };

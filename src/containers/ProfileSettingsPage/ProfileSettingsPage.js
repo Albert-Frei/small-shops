@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { compose } from 'redux';
 import { connect } from 'react-redux';
 
@@ -27,6 +27,7 @@ import {
   uploadImage,
   uploadGalleryImage,
   removeGalleryImage,
+  loadGalleryImages,
 } from './ProfileSettingsPage.duck';
 import css from './ProfileSettingsPage.module.css';
 
@@ -81,9 +82,11 @@ export const ProfileSettingsPageComponent = props => {
     currentUser,
     image,
     galleryImages,
+    storedGalleryImages,
     onImageUpload,
     onGalleryImageUpload,
     onRemoveGalleryImage,
+    onLoadGalleryImages,
     onUpdateProfile,
     scrollingDisabled,
     updateInProgress,
@@ -93,6 +96,13 @@ export const ProfileSettingsPageComponent = props => {
     uploadGalleryInProgress,
     uploadGalleryImageError,
   } = props;
+
+  // Load gallery images from metadata on mount if we have stored images but none loaded
+  useEffect(() => {
+    if (storedGalleryImages.length > 0 && galleryImages.length === 0) {
+      onLoadGalleryImages(storedGalleryImages);
+    }
+  }, [storedGalleryImages, galleryImages.length, onLoadGalleryImages]);
 
   const { userFields, userTypes = [] } = config.user;
 
@@ -106,6 +116,17 @@ export const ProfileSettingsPageComponent = props => {
     // Ensure that the optional bio is a string
     const bio = rawBio || '';
 
+    // Extract serializable image data for storage in metadata
+    const profileGalleryImages = galleryImages.map(img => {
+      const imgData = img.uploadedImage || img;
+      const id = imgData.id?.uuid || imgData.id;
+      const variants = imgData.attributes?.variants || {};
+      return {
+        id: typeof id === 'string' ? id : id?.uuid,
+        attributes: { variants },
+      };
+    }).filter(img => img.id && Object.keys(img.attributes.variants).length > 0);
+
     const profile = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
@@ -113,6 +134,7 @@ export const ProfileSettingsPageComponent = props => {
       bio,
       publicData: {
         ...pickUserFieldsData(rest, 'public', userType, userFields),
+        profileGalleryImages,
       },
       protectedData: {
         ...pickUserFieldsData(rest, 'protected', userType, userFields),
@@ -124,13 +146,10 @@ export const ProfileSettingsPageComponent = props => {
     const uploadedImage = props.image;
 
     // Update profileImage only if file system has been accessed
-    const updatedValues = {
-      ...profile,
-      metadata: { profileGalleryImages: galleryImages },
-      ...(uploadedImage && uploadedImage.imageId && uploadedImage.file
-        ? { profileImageId: uploadedImage.imageId }
-        : {}),
-    };
+    const updatedValues =
+      uploadedImage && uploadedImage.imageId && uploadedImage.file
+        ? { ...profile, profileImageId: uploadedImage.imageId }
+        : profile;
 
     onUpdateProfile(updatedValues);
   };
@@ -144,7 +163,6 @@ export const ProfileSettingsPageComponent = props => {
     publicData,
     protectedData,
     privateData,
-    metadata,
   } = user?.attributes.profile;
   // I.e. the status is active, not pending-approval or banned
   const isUnauthorizedUser = currentUser && !isUserAuthorized(currentUser);
@@ -157,6 +175,14 @@ export const ProfileSettingsPageComponent = props => {
   // ProfileSettingsForm decides if it's allowed to show the input field.
   const displayNameMaybe = isDisplayNameIncluded && displayName ? { displayName } : {};
 
+  // Check if gallery has been modified (comparing current gallery with stored)
+  const storedIds = new Set(storedGalleryImages.map(img => img.id));
+  const currentIds = new Set(galleryImages.map(img => img.id?.uuid || img.id));
+  const hasGalleryChanges =
+    storedIds.size !== currentIds.size ||
+    [...storedIds].some(id => !currentIds.has(id)) ||
+    [...currentIds].some(id => !storedIds.has(id));
+
   const profileSettingsForm = user.id ? (
     <ProfileSettingsForm
       className={css.form}
@@ -167,7 +193,6 @@ export const ProfileSettingsPageComponent = props => {
         ...displayNameMaybe,
         bio,
         profileImage: user.profileImage,
-        profileGalleryImages: metadata?.profileGalleryImages || [],
         ...initialValuesForUserFields(publicData, 'public', userType, userFields),
         ...initialValuesForUserFields(protectedData, 'protected', userType, userFields),
         ...initialValuesForUserFields(privateData, 'private', userType, userFields),
@@ -182,7 +207,16 @@ export const ProfileSettingsPageComponent = props => {
       marketplaceName={config.marketplaceName}
       userFields={userFields}
       userTypeConfig={userTypeConfig}
-    />
+      hasGalleryChanges={hasGalleryChanges}
+    >
+      <ProfileGalleryEditor
+        images={galleryImages}
+        onImageUpload={onGalleryImageUpload}
+        onRemoveImage={onRemoveGalleryImage}
+        uploadInProgress={uploadGalleryInProgress}
+        uploadError={uploadGalleryImageError}
+      />
+    </ProfileSettingsForm>
   ) : null;
 
   const title = intl.formatMessage({ id: 'ProfileSettingsPage.title' });
@@ -207,13 +241,6 @@ export const ProfileSettingsPageComponent = props => {
           <ViewProfileLink userUUID={user?.id?.uuid} isUnauthorizedUser={isUnauthorizedUser} />
         </div>
         {profileSettingsForm}
-        <ProfileGalleryEditor
-          images={galleryImages}
-          onImageUpload={onGalleryImageUpload}
-          onRemoveImage={onRemoveGalleryImage}
-          uploadInProgress={uploadGalleryInProgress}
-          uploadError={uploadGalleryImageError}
-        />
       </div>
       </LayoutSingleColumn>
     </Page>
@@ -224,7 +251,8 @@ const mapStateToProps = state => {
   const { currentUser } = state.user;
   const {
     image,
-    galleryImages: storedGalleryImages,
+    galleryImages,
+    removedGalleryImageIds,
     uploadImageError,
     uploadGalleryImageError,
     uploadInProgress,
@@ -232,12 +260,23 @@ const mapStateToProps = state => {
     updateInProgress,
     updateProfileError,
   } = state.ProfileSettingsPage;
-  const metadataImages = currentUser?.attributes?.profile?.metadata?.profileGalleryImages || [];
-  const galleryImages = storedGalleryImages.length > 0 ? storedGalleryImages : metadataImages;
+
+  // Get stored images from user's publicData
+  const storedGalleryImages =
+    currentUser?.attributes?.profile?.publicData?.profileGalleryImages || [];
+
+  // Filter out removed images from the display list
+  const removedIds = new Set(removedGalleryImageIds);
+  const filteredGalleryImages = galleryImages.filter(img => {
+    const imgId = img.id?.uuid || img.id;
+    return !removedIds.has(imgId);
+  });
+
   return {
     currentUser,
     image,
-    galleryImages,
+    galleryImages: filteredGalleryImages,
+    storedGalleryImages,
     scrollingDisabled: isScrollingDisabled(state),
     updateInProgress,
     updateProfileError,
@@ -252,6 +291,7 @@ const mapDispatchToProps = dispatch => ({
   onImageUpload: data => dispatch(uploadImage(data)),
   onGalleryImageUpload: data => dispatch(uploadGalleryImage(data)),
   onRemoveGalleryImage: id => dispatch(removeGalleryImage(id)),
+  onLoadGalleryImages: images => dispatch(loadGalleryImages(images)),
   onUpdateProfile: data => dispatch(updateProfile(data)),
 });
 

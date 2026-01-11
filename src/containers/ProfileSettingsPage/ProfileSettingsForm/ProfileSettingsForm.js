@@ -148,6 +148,7 @@ class ProfileSettingsFormComponent extends Component {
             values,
             userFields,
             userTypeConfig,
+            hasGalleryChanges,
           } = fieldRenderProps;
 
           const user = ensureCurrentUser(currentUser);
@@ -261,7 +262,11 @@ class ProfileSettingsFormComponent extends Component {
           const submittedOnce = Object.keys(this.submittedValues).length > 0;
           const pristineSinceLastSubmit = submittedOnce && isEqual(values, this.submittedValues);
           const submitDisabled =
-            invalid || pristine || pristineSinceLastSubmit || uploadInProgress || submitInProgress;
+            invalid ||
+            (pristine && !hasGalleryChanges) ||
+            (pristineSinceLastSubmit && !hasGalleryChanges) ||
+            uploadInProgress ||
+            submitInProgress;
 
           const userFieldProps = getPropsForCustomUserFieldInputs(
             userFields,
@@ -395,6 +400,7 @@ class ProfileSettingsFormComponent extends Component {
                   <CustomExtendedDataField key={key} {...fieldProps} formId={formId} />
                 ))}
               </div>
+              {this.props.children}
               {submitError}
               <Button
                 className={css.submitButton}

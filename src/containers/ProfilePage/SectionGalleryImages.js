@@ -14,11 +14,16 @@ const SectionGalleryImages = props => {
         Gallery
       </Heading>
       <ul className={css.galleryImagesList}>
-        {images.map(img => (
-          <li key={img.id} className={css.galleryImageWrapper}>
-            <img src={img.attributes.variants['square-small'].url} alt='' className={css.galleryImage} />
-          </li>
-        ))}
+        {images.map(img => {
+          const imgId = img.id?.uuid || img.id;
+          const imgUrl = img.attributes?.variants?.['square-small']?.url;
+          if (!imgUrl) return null;
+          return (
+            <li key={imgId} className={css.galleryImageWrapper}>
+              <img src={imgUrl} alt="" className={css.galleryImage} />
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
