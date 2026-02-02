@@ -14,6 +14,7 @@ import {
   propTypes,
 } from '../../util/types';
 import {
+  createSlug,
   NO_ACCESS_PAGE_USER_PENDING_APPROVAL,
   NO_ACCESS_PAGE_VIEW_LISTINGS,
   PROFILE_PAGE_PENDING_APPROVAL_VARIANT,
@@ -25,7 +26,11 @@ import {
   isNotFoundError,
 } from '../../util/errors';
 import { pickCustomFieldProps } from '../../util/fieldHelpers';
-import { hasPermissionToViewData, isUserAuthorized } from '../../util/userHelpers';
+import {
+  getCurrentUserTypeRoles,
+  hasPermissionToViewData,
+  isUserAuthorized,
+} from '../../util/userHelpers';
 import { richText } from '../../util/richText';
 
 import { isScrollingDisabled } from '../../ducks/ui.duck';
@@ -42,6 +47,11 @@ import {
   ButtonTabNavHorizontal,
   LayoutSideNavigation,
   NamedRedirect,
+  InlineTextButton,
+  IconClock,
+  IconPhone,
+  IconGlobe,
+  IconLocation,
 } from '../../components';
 
 import TopbarContainer from '../../containers/TopbarContainer/TopbarContainer';
@@ -53,20 +63,84 @@ import SectionDetailsMaybe from './SectionDetailsMaybe';
 import SectionTextMaybe from './SectionTextMaybe';
 import SectionMultiEnumMaybe from './SectionMultiEnumMaybe';
 import SectionYoutubeVideoMaybe from './SectionYoutubeVideoMaybe';
+import MediaSlider from '../../components/MediaSlider/MediaSlider';
 
 const MAX_MOBILE_SCREEN_WIDTH = 768;
 const MIN_LENGTH_FOR_LONG_WORDS = 20;
 
+const ExpandableBio = ({ bio, className, bioClassName }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const contentRef = React.useRef(null);
+
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    // Measure overflow on next paint to ensure styles are applied
+    const r = () => {
+      try {
+        const overflowing = el.scrollHeight > el.clientHeight + 1;
+        setIsOverflowing(overflowing);
+      } catch (_) {
+        setIsOverflowing(false);
+      }
+    };
+    r();
+    // Re-measure on window resize
+    window.addEventListener('resize', r);
+    return () => window.removeEventListener('resize', r);
+  }, [bio, isExpanded]);
+
+  const clampStyle = isExpanded
+    ? {}
+    : {
+        display: '-webkit-box',
+        WebkitLineClamp: 3,
+        WebkitBoxOrient: 'vertical',
+        overflow: 'hidden',
+      };
+
+  const bioWithLinks = richText(bio, {
+    linkify: true,
+    longWordMinLength: MIN_LENGTH_FOR_LONG_WORDS,
+    longWordClass: css.longWord,
+  });
+
+  return (
+    <div className={className}>
+      <div ref={contentRef} className={bioClassName} style={clampStyle}>
+        {bioWithLinks}
+      </div>
+      {!isExpanded && isOverflowing ? (
+        <InlineTextButton
+          as="button"
+          className={css.showMoreButton}
+          onClick={e => {
+            e.preventDefault();
+            setIsExpanded(true);
+          }}
+        >
+          <FormattedMessage id="UserCard.showFullBioLink" />
+        </InlineTextButton>
+      ) : null}
+    </div>
+  );
+};
+
 export const AsideContent = props => {
   const { user, displayName, showLinkToProfileSettingsPage } = props;
+  const { shopTitle } = user?.attributes?.profile?.publicData || {};
   return (
     <div className={css.asideContent}>
       <AvatarLarge className={css.avatar} user={user} disableProfileLink />
-      <H2 as="h1" className={css.mobileHeading}>
-        {displayName ? (
-          <FormattedMessage id="ProfilePage.mobileHeading" values={{ name: displayName }} />
-        ) : null}
-      </H2>
+      <div className={css.mobileHeadingContainer}>
+        <H2 as="h1" className={css.mobileHeading}>
+          {displayName ? (
+            <FormattedMessage id="ProfilePage.mobileHeading" values={{ name: displayName }} />
+          ) : null}
+        </H2>
+        {shopTitle ? <span className={css.shopTitle}>{shopTitle}</span> : null}
+      </div>
       {showLinkToProfileSettingsPage ? (
         <>
           <NamedLink className={css.editLinkMobile} name="ProfileSettingsPage">
@@ -117,38 +191,52 @@ export const MobileReviews = props => {
 };
 
 export const DesktopReviews = props => {
-  const [showReviewsType, setShowReviewsType] = useState(REVIEW_TYPE_OF_PROVIDER);
-  const { reviews, queryReviewsError } = props;
+  const { reviews, queryReviewsError, userTypeRoles } = props;
+  const { customer: isCustomerUserType, provider: isProviderUserType } = userTypeRoles;
+
+  const initialReviewState = !isProviderUserType
+    ? REVIEW_TYPE_OF_CUSTOMER
+    : REVIEW_TYPE_OF_PROVIDER;
+  const [showReviewsType, setShowReviewsType] = useState(initialReviewState);
+
   const reviewsOfProvider = reviews.filter(r => r.attributes.type === REVIEW_TYPE_OF_PROVIDER);
   const reviewsOfCustomer = reviews.filter(r => r.attributes.type === REVIEW_TYPE_OF_CUSTOMER);
   const isReviewTypeProviderSelected = showReviewsType === REVIEW_TYPE_OF_PROVIDER;
   const isReviewTypeCustomerSelected = showReviewsType === REVIEW_TYPE_OF_CUSTOMER;
-  const desktopReviewTabs = [
-    {
-      text: (
-        <Heading as="h3" rootClassName={css.desktopReviewsTitle}>
-          <FormattedMessage
-            id="ProfilePage.reviewsFromMyCustomersTitle"
-            values={{ count: reviewsOfProvider.length }}
-          />
-        </Heading>
-      ),
-      selected: isReviewTypeProviderSelected,
-      onClick: () => setShowReviewsType(REVIEW_TYPE_OF_PROVIDER),
-    },
-    {
-      text: (
-        <Heading as="h3" rootClassName={css.desktopReviewsTitle}>
-          <FormattedMessage
-            id="ProfilePage.reviewsAsACustomerTitle"
-            values={{ count: reviewsOfCustomer.length }}
-          />
-        </Heading>
-      ),
-      selected: isReviewTypeCustomerSelected,
-      onClick: () => setShowReviewsType(REVIEW_TYPE_OF_CUSTOMER),
-    },
-  ];
+  const providerReviewsMaybe = isProviderUserType
+    ? [
+        {
+          text: (
+            <Heading as="h3" rootClassName={css.desktopReviewsTitle}>
+              <FormattedMessage
+                id="ProfilePage.reviewsFromMyCustomersTitle"
+                values={{ count: reviewsOfProvider.length }}
+              />
+            </Heading>
+          ),
+          selected: isReviewTypeProviderSelected,
+          onClick: () => setShowReviewsType(REVIEW_TYPE_OF_PROVIDER),
+        },
+      ]
+    : [];
+
+  const customerReviewsMaybe = isCustomerUserType
+    ? [
+        {
+          text: (
+            <Heading as="h3" rootClassName={css.desktopReviewsTitle}>
+              <FormattedMessage
+                id="ProfilePage.reviewsAsACustomerTitle"
+                values={{ count: reviewsOfCustomer.length }}
+              />
+            </Heading>
+          ),
+          selected: isReviewTypeCustomerSelected,
+          onClick: () => setShowReviewsType(REVIEW_TYPE_OF_CUSTOMER),
+        },
+      ]
+    : [];
+  const desktopReviewTabs = [...providerReviewsMaybe, ...customerReviewsMaybe];
 
   return (
     <div className={css.desktopReviews}>
@@ -211,6 +299,8 @@ export const MainContent = props => {
     userFieldConfig,
     intl,
     hideReviews,
+    userTypeRoles,
+    galleryImages = [],
   } = props;
 
   const hasListings = listings.length > 0;
@@ -238,12 +328,25 @@ export const MainContent = props => {
       </p>
     );
   }
+
+  const {
+    shopTitle,
+    shopOpeningHours,
+    shopPhoneNumber,
+    shopWebsite,
+    shopLocation,
+  } = publicData;
   return (
     <div>
-      <H2 as="h1" className={css.desktopHeading}>
-        <FormattedMessage id="ProfilePage.desktopHeading" values={{ name: displayName }} />
-      </H2>
-      {hasBio ? <p className={css.bio}>{bioWithLinks}</p> : null}
+      <div className={css.desktopHeadingContainer}>
+        <H2 as="h1" className={css.desktopHeading}>
+          <FormattedMessage id="ProfilePage.desktopHeading" values={{ name: displayName }} />
+        </H2>
+        {shopTitle ? <span className={css.shopTitle}>{shopTitle}</span> : null}
+      </div>
+      {hasBio ? (
+        <ExpandableBio className={css.bioWrapper} bio={bio} bioClassName={css.bio} />
+      ) : null}
 
       {displayName ? (
         <CustomUserFields
@@ -254,6 +357,47 @@ export const MainContent = props => {
         />
       ) : null}
 
+      {galleryImages.length > 0 ? <MediaSlider images={galleryImages} /> : null}
+
+      {(shopOpeningHours || shopPhoneNumber || shopWebsite || shopLocation?.address) ? (
+        <div className={css.shopInfoSection}>
+          {shopOpeningHours ? (
+            <p className={css.shopExtraInfo}>
+              <IconClock className={css.infoIcon} />
+              {shopOpeningHours}
+            </p>
+          ) : null}
+
+          {shopPhoneNumber ? (
+            <p className={css.shopPhoneNumber}>
+              <IconPhone className={css.infoIcon} />
+              {shopPhoneNumber}
+            </p>
+          ) : null}
+
+          {shopWebsite ? (
+            <p className={css.shopWebsite}>
+              <IconGlobe className={css.infoIcon} />
+              <a href={shopWebsite} target="_blank" rel="noopener noreferrer">
+                {shopWebsite}
+              </a>
+            </p>
+          ) : null}
+
+          {shopLocation?.address ? (
+            <p className={css.shopLocation}>
+              <IconLocation className={css.infoIcon} />
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(displayName + ', ' + shopLocation.address)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {shopLocation.address}
+              </a>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {hasListings ? (
         <div className={listingsContainerClasses}>
           <H4 as="h2" className={css.listingsTitle}>
@@ -269,9 +413,17 @@ export const MainContent = props => {
         </div>
       ) : null}
       {hideReviews ? null : isMobileLayout ? (
-        <MobileReviews reviews={reviews} queryReviewsError={queryReviewsError} />
+        <MobileReviews
+          reviews={reviews}
+          queryReviewsError={queryReviewsError}
+          userTypeRoles={userTypeRoles}
+        />
       ) : (
-        <DesktopReviews reviews={reviews} queryReviewsError={queryReviewsError} />
+        <DesktopReviews
+          reviews={reviews}
+          queryReviewsError={queryReviewsError}
+          userTypeRoles={userTypeRoles}
+        />
       )}
     </div>
   );
@@ -329,6 +481,7 @@ export const ProfilePageComponent = props => {
   const isCurrentUser = currentUser?.id && currentUser?.id?.uuid === pathParams.id;
   const profileUser = useCurrentUser ? currentUser : user;
   const { bio, displayName, publicData, metadata } = profileUser?.attributes?.profile || {};
+
   const { userFields } = config.user;
   const isPrivateMarketplace = config.accessControl.marketplace.private === true;
   const isUnauthorizedUser = currentUser && !isUserAuthorized(currentUser);
@@ -336,6 +489,8 @@ export const ProfilePageComponent = props => {
   const hasUserPendingApprovalError = isErrorUserPendingApproval(userShowError);
   const hasNoViewingRightsUser = currentUser && !hasPermissionToViewData(currentUser);
   const hasNoViewingRightsOnPrivateMarketplace = isPrivateMarketplace && hasNoViewingRightsUser;
+
+  const userTypeRoles = getCurrentUserTypeRoles(config, profileUser);
 
   const isDataLoaded = isPreview
     ? currentUser != null || userShowError != null
@@ -348,7 +503,26 @@ export const ProfilePageComponent = props => {
 
   if (!isDataLoaded) {
     return null;
-  } else if (!isPreview && isNotFoundError(userShowError)) {
+  }
+
+  // SEO-friendly URL: Generate slug from displayName (like ListingPage does)
+  // We use the same pattern as ListingPage - generate slug if missing, use for internal links
+  const profileSlug = pathParams.slug || createSlug(displayName || '');
+
+  // Client-side redirect to canonical URL with slug
+  // Note: SSR redirect is not possible in private marketplace because loadData is skipped for auth routes
+  const currentSlug = displayName ? createSlug(displayName) : null;
+  const urlSlug = pathParams.slug;
+  const shouldRedirect = mounted && currentSlug && (!urlSlug || urlSlug !== currentSlug);
+  if (shouldRedirect) {
+    const redirectParams = pathParams.variant
+      ? { slug: currentSlug, id: pathParams.id, variant: pathParams.variant }
+      : { slug: currentSlug, id: pathParams.id };
+    const redirectName = pathParams.variant ? 'ProfilePageVariant' : 'ProfilePage';
+    return <NamedRedirect name={redirectName} params={redirectParams} />;
+  }
+
+  if (!isPreview && isNotFoundError(userShowError)) {
     return <NotFoundPage staticContext={props.staticContext} />;
   } else if (!isPreview && (isUnauthorizedOnPrivateMarketplace || hasUserPendingApprovalError)) {
     return (
@@ -379,14 +553,16 @@ export const ProfilePageComponent = props => {
     );
   } else if (isPreview && mounted && !isCurrentUser) {
     // Someone is manipulating the URL, redirect to current user's profile page.
+    const currentUserSlug = createSlug(currentUser?.attributes?.profile?.displayName || '');
     return isCurrentUser === false ? (
-      <NamedRedirect name="ProfilePage" params={{ id: currentUser?.id?.uuid }} />
+      <NamedRedirect name="ProfilePage" params={{ slug: currentUserSlug, id: currentUser?.id?.uuid }} />
     ) : null;
   } else if ((isPreview || isPrivateMarketplace) && !mounted) {
     // This preview of the profile page is not rendered on server-side
     // and the first pass on client-side should render the same UI.
     return null;
   }
+
   // This is rendering normal profile page (not preview for pending-approval)
   return (
     <Page
@@ -395,6 +571,10 @@ export const ProfilePageComponent = props => {
       schema={{
         '@context': 'http://schema.org',
         '@type': 'ProfilePage',
+        mainEntity: {
+          '@type': 'Person',
+          name: profileUser?.attributes?.profile?.displayName,
+        },
         name: schemaTitle,
       }}
     >
@@ -419,6 +599,7 @@ export const ProfilePageComponent = props => {
           userFieldConfig={userFields}
           hideReviews={hasNoViewingRightsOnPrivateMarketplace}
           intl={intl}
+          userTypeRoles={userTypeRoles}
           {...rest}
         />
       </LayoutSideNavigation>
@@ -435,6 +616,7 @@ const mapStateToProps = state => {
     userListingRefs,
     reviews = [],
     queryReviewsError,
+    galleryImages = [],
   } = state.ProfilePage;
   const userMatches = getMarketplaceEntities(state, [{ type: 'user', id: userId }]);
   const user = userMatches.length === 1 ? userMatches[0] : null;
@@ -454,9 +636,11 @@ const mapStateToProps = state => {
     listings: getMarketplaceEntities(state, userListingRefs),
     reviews,
     queryReviewsError,
+    galleryImages,
   };
 };
 
 const ProfilePage = compose(connect(mapStateToProps))(ProfilePageComponent);
 
 export default ProfilePage;
+// force rebuild 1766910755
